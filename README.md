@@ -27,3 +27,7 @@
 
 - AniList data requires internet access.
 - List data is stored in browser storage, not a backend database.
+
+## License
+
+[MIT](./LICENSE)
