@@ -3,11 +3,103 @@ import { Anime, AnimeStatus, AnimeListState } from '@/types/anime';
 
 const STORAGE_KEY = 'animeILikeToWatch_list';
 
+const ANIME_STATUSES: AnimeStatus[] = ['watching', 'completed', 'plan-to-watch', 'dropped', 'on-hold'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isAnimeStatus = (value: unknown): value is AnimeStatus =>
+  typeof value === 'string' && ANIME_STATUSES.includes(value as AnimeStatus);
+
+const asNonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const asFiniteNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const asPositiveInt = (value: unknown): number | undefined => {
+  const parsed = asFiniteNumber(value);
+  if (parsed === undefined) return undefined;
+  const intValue = Math.trunc(parsed);
+  return intValue > 0 ? intValue : undefined;
+};
+
+const asNonNegativeInt = (value: unknown): number | undefined => {
+  const parsed = asFiniteNumber(value);
+  if (parsed === undefined) return undefined;
+  const intValue = Math.trunc(parsed);
+  return intValue >= 0 ? intValue : undefined;
+};
+
+const asTimestamp = (value: unknown): number | undefined => {
+  const parsed = asFiniteNumber(value);
+  return parsed !== undefined && parsed > 0 ? parsed : undefined;
+};
+
+const sanitizeGenres = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+
+  const genres = value
+    .map((genre) => asNonEmptyString(genre))
+    .filter((genre): genre is string => Boolean(genre));
+
+  return [...new Set(genres)].slice(0, 10);
+};
+
+const sanitizeAnime = (value: unknown): Anime | null => {
+  if (!isRecord(value)) return null;
+
+  const title = asNonEmptyString(value.title);
+  const imageUrl = asNonEmptyString(value.imageUrl);
+
+  if (!title || !imageUrl) return null;
+
+  const episodes = asPositiveInt(value.episodes);
+  const currentEpisodeRaw = asNonNegativeInt(value.currentEpisode);
+  const currentEpisode =
+    currentEpisodeRaw !== undefined && episodes !== undefined
+      ? Math.min(currentEpisodeRaw, episodes)
+      : currentEpisodeRaw;
+
+  const addedAt = asTimestamp(value.addedAt) ?? Date.now();
+  const updatedAt = asTimestamp(value.updatedAt) ?? Date.now();
+
+  return {
+    id: asNonEmptyString(value.id) ?? crypto.randomUUID(),
+    title,
+    titleJapanese: asNonEmptyString(value.titleJapanese),
+    imageUrl,
+    episodes,
+    currentEpisode,
+    description: asNonEmptyString(value.description) ?? 'No description available.',
+    genres: sanitizeGenres(value.genres),
+    status: isAnimeStatus(value.status) ? value.status : 'plan-to-watch',
+    rating: asFiniteNumber(value.rating),
+    year: asPositiveInt(value.year),
+    anilistId: asPositiveInt(value.anilistId),
+    addedAt,
+    updatedAt,
+  };
+};
+
 const getInitialState = (): AnimeListState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored) as unknown;
+      if (isRecord(parsed) && Array.isArray(parsed.animes)) {
+        const sanitizedAnimes = parsed.animes
+          .map(sanitizeAnime)
+          .filter((anime): anime is Anime => anime !== null);
+
+        return {
+          animes: sanitizedAnimes,
+          lastUpdated: Date.now(),
+        };
+      }
     }
   } catch (error) {
     console.error('Failed to load anime list from localStorage:', error);
@@ -88,16 +180,43 @@ export function useAnimeList() {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const imported = JSON.parse(e.target?.result as string) as AnimeListState;
-          if (imported.animes && Array.isArray(imported.animes)) {
-            setState({
-              animes: imported.animes,
-              lastUpdated: Date.now(),
-            });
-            resolve(true);
-          } else {
+          const parsed = JSON.parse(e.target?.result as string) as unknown;
+
+          const sourceAnimes = Array.isArray(parsed)
+            ? parsed
+            : isRecord(parsed) && Array.isArray(parsed.animes)
+              ? parsed.animes
+              : null;
+
+          if (!sourceAnimes) {
             resolve(false);
+            return;
           }
+
+          const sanitized = sourceAnimes
+            .map(sanitizeAnime)
+            .filter((anime): anime is Anime => anime !== null);
+
+          if (sourceAnimes.length > 0 && sanitized.length === 0) {
+            resolve(false);
+            return;
+          }
+
+          const usedIds = new Set<string>();
+          const deduped = sanitized.map((anime) => {
+            let nextId = anime.id;
+            while (usedIds.has(nextId)) {
+              nextId = crypto.randomUUID();
+            }
+            usedIds.add(nextId);
+            return nextId === anime.id ? anime : { ...anime, id: nextId };
+          });
+
+          setState({
+            animes: deduped,
+            lastUpdated: Date.now(),
+          });
+          resolve(true);
         } catch {
           resolve(false);
         }

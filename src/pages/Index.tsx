@@ -15,7 +15,7 @@ const Index = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  
+
   const {
     animes,
     addAnime,
@@ -31,6 +31,7 @@ const Index = () => {
     animes,
     addAnime,
     updateStatus,
+    updateProgress,
     getByStatus,
     exportList,
   });
@@ -76,11 +77,11 @@ const Index = () => {
                 animeCount={animes.length}
                 animes={animes}
               />
-              
-              {/* Mobile chat trigger */}
+
+              {/* Chat trigger */}
               <Sheet open={chatOpen} onOpenChange={setChatOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="lg:hidden">
+                  <Button variant="outline" size="icon">
                     <MessageCircle className="w-4 h-4" />
                   </Button>
                 </SheetTrigger>
@@ -113,7 +114,7 @@ const Index = () => {
                   Welcome to AnimeILikeToWatch!
                 </h2>
                 <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  Start building your anime list. Add anime you're watching, completed, 
+                  Start building your anime list. Add anime you're watching, completed,
                   or planning to watch. Ask AniBuddy for recommendations!
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -124,7 +125,7 @@ const Index = () => {
                   <Button
                     variant="outline"
                     onClick={() => setChatOpen(true)}
-                    className="gap-2 lg:hidden"
+                    className="gap-2"
                   >
                     <MessageCircle className="w-4 h-4" />
                     Ask AniBuddy
@@ -142,16 +143,6 @@ const Index = () => {
             )}
           </div>
 
-          {/* Desktop Chat Panel */}
-          <div className="hidden lg:block w-96 flex-shrink-0">
-            <div className="sticky top-24 h-[calc(100vh-8rem)]">
-              <ChatPanel
-                messages={messages}
-                isTyping={isTyping}
-                onSendMessage={sendMessage}
-              />
-            </div>
-          </div>
         </div>
       </main>
 
@@ -164,16 +155,6 @@ const Index = () => {
         onUpdateProgress={updateProgress}
       />
 
-      {/* Mobile Chat FAB */}
-      {!chatOpen && (
-        <Button
-          onClick={() => setChatOpen(true)}
-          className="lg:hidden fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg z-50"
-          size="icon"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </Button>
-      )}
     </div>
   );
 };

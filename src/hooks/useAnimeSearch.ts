@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { searchAnime, getTrendingAnime, AniListAnime, convertAniListToAppFormat } from '@/lib/anilist';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { searchAnime, getTrendingAnime, convertAniListToAppFormat } from '@/lib/anilist';
 import { useDebounce } from '@/hooks/useDebounce';
 
 export interface SearchResult {
@@ -18,61 +18,97 @@ export function useAnimeSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [trending, setTrending] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isTrendingLoading, setIsTrendingLoading] = useState(false);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const debouncedQuery = useDebounce(query, 300);
+  const searchRequestIdRef = useRef(0);
 
   // Fetch trending on mount
   useEffect(() => {
+    let cancelled = false;
+
     const fetchTrending = async () => {
-      setIsLoading(true);
+      setIsTrendingLoading(true);
       try {
         const { animes } = await getTrendingAnime(1, 30);
-        setTrending(animes.map(convertAniListToAppFormat));
+        if (!cancelled) {
+          setTrending(animes.map(convertAniListToAppFormat));
+        }
       } catch (err) {
-        console.error('Failed to fetch trending:', err);
+        if (!cancelled) {
+          console.error('Failed to fetch trending:', err);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsTrendingLoading(false);
+        }
       }
     };
+
     fetchTrending();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Search when query changes
   useEffect(() => {
+    let cancelled = false;
+    const queryText = debouncedQuery.trim();
+
     const performSearch = async () => {
-      if (!debouncedQuery.trim()) {
+      if (!queryText) {
+        // Invalidate previous in-flight searches.
+        searchRequestIdRef.current += 1;
         setResults([]);
         setError(null);
+        setIsSearchLoading(false);
         return;
       }
 
-      setIsLoading(true);
+      const requestId = ++searchRequestIdRef.current;
+      setIsSearchLoading(true);
       setError(null);
 
       try {
-        const { animes } = await searchAnime(debouncedQuery, 1, 30);
+        const { animes } = await searchAnime(queryText, 1, 30);
+        if (cancelled || requestId !== searchRequestIdRef.current) {
+          return;
+        }
+
         setResults(animes.map(convertAniListToAppFormat));
-        
+
         if (animes.length === 0) {
           setError('No anime found. Try a different search term.');
         }
       } catch (err) {
-        setError('Failed to search. Please try again.');
-        console.error('Search error:', err);
+        if (!cancelled && requestId === searchRequestIdRef.current) {
+          setError('Failed to search. Please try again.');
+          console.error('Search error:', err);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled && requestId === searchRequestIdRef.current) {
+          setIsSearchLoading(false);
+        }
       }
     };
 
     performSearch();
+
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedQuery]);
 
   const clearSearch = useCallback(() => {
     setQuery('');
     setResults([]);
     setError(null);
+    setIsSearchLoading(false);
+    searchRequestIdRef.current += 1;
   }, []);
 
   return {
@@ -80,7 +116,7 @@ export function useAnimeSearch() {
     setQuery,
     results,
     trending,
-    isLoading,
+    isLoading: isTrendingLoading || isSearchLoading,
     error,
     clearSearch,
     displayResults: query.trim() ? results : trending,

@@ -8,10 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from './StatusBadge';
 import { 
   Play, Star, Calendar, Clock, Tv, Film, Users, 
-  ExternalLink, ChevronRight, Loader2, Plus, Minus,
+  ExternalLink, Loader2, Plus, Minus,
   CheckCircle2, Timer
 } from 'lucide-react';
-import { getAnimeDetails, searchAnimeByTitle, AniListAnime, cleanDescription, formatStatus, formatTimeUntilAiring } from '@/lib/anilist';
+import { getAnimeDetails, searchAnimeByTitle, AniListAnime, cleanDescription, formatTimeUntilAiring } from '@/lib/anilist';
 
 interface AnimeDetailsSheetProps {
   anime: Anime | null;
@@ -32,31 +32,48 @@ export function AnimeDetailsSheet({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open && anime) {
-      setLoading(true);
-      setDetails(null);
-      
-      // Try to fetch details using anilistId or search by title
-      const fetchDetails = async () => {
-        try {
-          let result: AniListAnime | null = null;
-          
-          // First try searching by title to get the AniList ID
+    if (!open || !anime) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setDetails(null);
+
+    const fetchDetails = async () => {
+      try {
+        let result: AniListAnime | null = null;
+
+        // Prefer stored AniList ID for precision and speed.
+        if (anime.anilistId) {
+          result = await getAnimeDetails(anime.anilistId);
+        }
+
+        // Fallback to title-based lookup if no ID exists or lookup fails.
+        if (!result) {
           const searchResult = await searchAnimeByTitle(anime.title);
           if (searchResult) {
             result = await getAnimeDetails(searchResult.id);
           }
-          
+        }
+
+        if (!cancelled) {
           setDetails(result);
-        } catch (error) {
+        }
+      } catch (error) {
+        if (!cancelled) {
           console.error('Error fetching anime details:', error);
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setLoading(false);
         }
-      };
-      
-      fetchDetails();
-    }
+      }
+    };
+
+    fetchDetails();
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, anime]);
 
   if (!anime) return null;

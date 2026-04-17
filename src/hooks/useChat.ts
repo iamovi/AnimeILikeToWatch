@@ -4,66 +4,171 @@ import { sampleAnimes } from '@/data/sampleAnimes';
 
 const GREETINGS = [
   "Hey there! 👋 I'm AniBuddy, your anime companion! What are we watching today?",
-  "Yo! Welcome back, fellow weeb~ 🎌 Ready to dive into some anime?",
+  'Yo! Welcome back, fellow weeb~ 🎌 Ready to dive into some anime?',
   "Konnichiwa! ✨ AniBuddy at your service! What anime adventure awaits?",
   "Hey hey! 🌸 Your friendly neighborhood anime buddy here! What's up?",
   "*stretches* Oh! You're here! 😄 Let's talk anime!",
 ];
 
 const THINKING_PHRASES = [
-  "Hmm, let me think...",
-  "Ooh, good question!",
-  "Ah, I see what you mean~",
-  "Oh! That reminds me...",
+  'Hmm, let me think...',
+  'Ooh, good question!',
+  'Ah, I see what you mean~',
+  'Oh! That reminds me...',
 ];
 
-const EXCITED_REACTIONS = ["🔥", "✨", "💫", "🎉", "⭐", "💖", "🌟"];
-const randomReaction = () => EXCITED_REACTIONS[Math.floor(Math.random() * EXCITED_REACTIONS.length)];
-const randomThinking = () => THINKING_PHRASES[Math.floor(Math.random() * THINKING_PHRASES.length)];
+const EXCITED_REACTIONS = ['🔥', '✨', '💫', '🎉', '⭐', '💖', '🌟'];
 
-const getRandomGreeting = () => GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
-
-// Personality responses for different moods
-const enthusiasticPhrases = [
-  "Oh man, you have GREAT taste!",
-  "Yesss, I love this choice!",
-  "A person of culture, I see~",
+const ENTHUSIASTIC_PHRASES = [
+  'Oh man, you have GREAT taste!',
+  'Yesss, I love this choice!',
+  'A person of culture, I see~',
   "Now we're talking!",
-  "Excellent pick, seriously!",
+  'Excellent pick, seriously!',
   "This is gonna be good! 🔥",
   "You won't regret this one!",
 ];
 
-const empathyPhrases = [
-  "I totally get that!",
-  "Right? Same here honestly",
-  "I feel you on that one",
-  "Mood, honestly",
-  "Been there!",
+const EMPATHY_PHRASES = [
+  'I totally get that!',
+  'Right? Same here honestly',
+  'I feel you on that one',
+  'Mood, honestly',
+  'Been there!',
 ];
 
-const casualFillers = [
-  "haha",
-  "lol",
-  "honestly",
-  "ngl",
-  "tbh",
-  "~",
+const STATUS_ALIASES: Record<AnimeStatus, string[]> = {
+  watching: ['watching', 'watch', 'current'],
+  completed: ['completed', 'complete', 'finished', 'done'],
+  'plan-to-watch': ['plan to watch', 'plan', 'planned', 'queue', 'later', 'watchlist'],
+  'on-hold': ['on hold', 'hold', 'paused', 'pause'],
+  dropped: ['dropped', 'drop', 'quit', 'stopped'],
+};
+
+const STATUS_LABELS: Record<AnimeStatus, string> = {
+  watching: 'Watching',
+  completed: 'Completed',
+  'plan-to-watch': 'Plan to Watch',
+  'on-hold': 'On Hold',
+  dropped: 'Dropped',
+};
+
+const GENRE_KEYWORDS = [
+  'action',
+  'romance',
+  'comedy',
+  'horror',
+  'slice of life',
+  'fantasy',
+  'sci-fi',
+  'psychological',
+  'sports',
+  'isekai',
+  'thriller',
+  'mystery',
+  'drama',
+  'adventure',
+  'music',
+  'school',
+  'supernatural',
 ];
 
-const randomEnthusiastic = () => enthusiasticPhrases[Math.floor(Math.random() * enthusiasticPhrases.length)];
-const randomEmpathy = () => empathyPhrases[Math.floor(Math.random() * empathyPhrases.length)];
-const randomFiller = () => casualFillers[Math.floor(Math.random() * casualFillers.length)];
+const getRandom = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
+
+const pickMany = <T,>(items: T[], count: number): T[] => {
+  const shuffled = [...items].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+};
+
+const normalizeText = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizeTitle = (value: string): string => normalizeText(value);
+
+const shortDescription = (text: string, maxLength = 110): string => {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const getRandomGreeting = () => getRandom(GREETINGS);
+const randomReaction = () => getRandom(EXCITED_REACTIONS);
+const randomThinking = () => getRandom(THINKING_PHRASES);
+const randomEnthusiastic = () => getRandom(ENTHUSIASTIC_PHRASES);
+const randomEmpathy = () => getRandom(EMPATHY_PHRASES);
+
+const detectGenre = (message: string): string | null => {
+  const lowerMessage = message.toLowerCase();
+  return GENRE_KEYWORDS.find((genre) => lowerMessage.includes(genre)) || null;
+};
+
+const detectStatus = (message: string): AnimeStatus | null => {
+  const normalized = normalizeText(message);
+  const statuses = Object.entries(STATUS_ALIASES) as Array<[AnimeStatus, string[]]>;
+
+  for (const [status, aliases] of statuses) {
+    if (aliases.some((alias) => normalized.includes(normalizeText(alias)))) {
+      return status;
+    }
+  }
+
+  return null;
+};
+
+const titleMentioned = (message: string, title: string): boolean => {
+  const normalizedMessage = normalizeText(message);
+  const normalizedTitle = normalizeTitle(title);
+
+  if (!normalizedMessage || !normalizedTitle) return false;
+  if (normalizedMessage.includes(normalizedTitle)) return true;
+
+  const titleTokens = normalizedTitle.split(' ').filter((token) => token.length > 2);
+  if (titleTokens.length < 2) return false;
+
+  return titleTokens.every((token) => normalizedMessage.includes(token));
+};
+
+const findAnimeByMessage = <T extends { title: string }>(message: string, list: T[]): T | null => {
+  const byLongestTitle = [...list].sort((a, b) => b.title.length - a.title.length);
+  return byLongestTitle.find((anime) => titleMentioned(message, anime.title)) || null;
+};
+
+const topGenres = (animes: Anime[]): string[] => {
+  const counts = new Map<string, number>();
+
+  for (const anime of animes) {
+    for (const genre of anime.genres) {
+      const key = genre.toLowerCase();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([genre]) => genre);
+};
+
+const extractEpisodeNumber = (message: string): number | null => {
+  const match = message.match(/(?:episode|ep)\s*#?\s*(\d{1,4})/i) || message.match(/\b(\d{1,4})\s*episodes?\b/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 interface UseChatProps {
   animes: Anime[];
   addAnime: (anime: Omit<Anime, 'id' | 'addedAt' | 'updatedAt'>) => Anime;
   updateStatus: (id: string, status: AnimeStatus) => void;
+  updateProgress: (id: string, episode: number) => void;
   getByStatus: (status: AnimeStatus) => Anime[];
   exportList: () => void;
 }
 
-export function useChat({ animes, addAnime, getByStatus, exportList }: UseChatProps) {
+export function useChat({ animes, addAnime, updateStatus, updateProgress, getByStatus, exportList }: UseChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -76,143 +181,272 @@ export function useChat({ animes, addAnime, getByStatus, exportList }: UseChatPr
 
   const generateResponse = useCallback((userMessage: string): string => {
     const lowerMessage = userMessage.toLowerCase();
+    const normalizedMessage = normalizeText(userMessage);
 
-    // Casual greetings
-    if (/^(hi|hello|hey|yo|sup|wassup|what'?s up)/i.test(lowerMessage)) {
-      const greetings = [
-        `Hey hey! ${randomReaction()} What's on your mind today?`,
-        "Yo! Good to see you~ Wanna talk anime or check your list?",
-        "Hiii! 👋 I was just thinking about what anime to recommend you lol",
-        "*waves excitedly* What brings you here today?",
-      ];
-      return greetings[Math.floor(Math.random() * greetings.length)];
+    const trackedAnime = findAnimeByMessage(userMessage, animes);
+    const catalogAnime = findAnimeByMessage(userMessage, sampleAnimes);
+    const requestedStatus = detectStatus(userMessage);
+
+    if (!normalizedMessage) {
+      return 'Say anything anime-related and I got you. Recommendations, stats, list updates, all of it ✨';
     }
 
-    // How are you / personal questions
+    if (/^(hi|hello|hey|yo|sup|wassup|what\s?up)\b/i.test(lowerMessage)) {
+      const greetings = [
+        `Hey hey! ${randomReaction()} What's on your mind today?`,
+        'Yo! Good to see you~ Wanna talk anime or check your list?',
+        'Hiii! 👋 I was just thinking about what anime to recommend you lol',
+        '*waves excitedly* What brings you here today?',
+      ];
+      return getRandom(greetings);
+    }
+
     if (lowerMessage.includes('how are you') || lowerMessage.includes("how's it going") || lowerMessage.includes('how are u')) {
       const responses = [
         "I'm doing great! Just been binge-watching some classics~ 😄 How about you?",
-        "Pretty good! Been thinking about which anime to recommend next haha. You?",
-        "Living my best life helping fellow weebs! 🌸 What about you?",
+        'Pretty good! Been thinking about which anime to recommend next haha. You?',
+        'Living my best life helping fellow weebs! 🌸 What about you?',
         "Can't complain! Just vibing with some good anime energy~ You doing okay?",
       ];
-      return responses[Math.floor(Math.random() * responses.length)];
+      return getRandom(responses);
     }
 
-    // Thanks responses
-    if (/thank|thanks|thx|ty/i.test(lowerMessage)) {
+    if (/\b(thank|thanks|thx|ty)\b/i.test(lowerMessage)) {
       const thanks = [
         "Anytime! That's what I'm here for~ 😊",
-        "No problem at all! Happy to help a fellow anime fan!",
+        'No problem at all! Happy to help a fellow anime fan!',
         "You're welcome! 💫 Let me know if you need anything else!",
-        "Of course! *happy anime noises* 🎌",
+        'Of course! *happy anime noises* 🎌',
       ];
-      return thanks[Math.floor(Math.random() * thanks.length)];
+      return getRandom(thanks);
     }
 
-    // Recommendation requests
-    if (lowerMessage.includes('recommend') || lowerMessage.includes('suggest') || lowerMessage.includes('similar') || lowerMessage.includes('what should i watch')) {
-      const genres = ['action', 'romance', 'comedy', 'horror', 'slice of life', 'fantasy', 'sci-fi', 'psychological', 'sports', 'isekai'];
-      const mentionedGenre = genres.find(g => lowerMessage.includes(g));
-      
-      let recommendations = sampleAnimes;
-      if (mentionedGenre) {
-        recommendations = sampleAnimes.filter(a => 
-          a.genres.some(g => g.toLowerCase().includes(mentionedGenre))
-        );
-      }
-      
-      const picks = recommendations.sort(() => Math.random() - 0.5).slice(0, 3);
-      
-      if (picks.length === 0) {
-        return `Hmm, I couldn't find exact matches for that... ${randomReaction()} BUT, you can't go wrong with Attack on Titan, Demon Slayer, or Jujutsu Kaisen - they're absolutely incredible! Want me to add any to your list?`;
-      }
-
-      const intro = mentionedGenre 
-        ? `Ooh ${mentionedGenre} anime? ${randomEnthusiastic()} Here are some bangers:`
-        : `${randomThinking()} Based on my totally professional anime expertise, you should check out:`;
-      
-      return `${intro}\n\n${picks.map(a => `• **${a.title}** - ${a.description.slice(0, 100)}...`).join('\n\n')}\n\n${randomReaction()} Want me to add any of these to your list? Just say the word!`;
+    if (/\b(backup|export|save|download)\b/i.test(lowerMessage)) {
+      exportList();
+      return 'Gotcha! Downloading your backup now! 📁✨ Keep it safe and you can restore it anytime from Settings.';
     }
 
-    // Add to list with context
-    if (lowerMessage.includes('add') && (lowerMessage.includes('list') || lowerMessage.includes('watch'))) {
-      const found = sampleAnimes.find(a => lowerMessage.includes(a.title.toLowerCase()));
-      
-      if (found) {
-        const alreadyExists = animes.some(a => a.title.toLowerCase() === found.title.toLowerCase());
-        if (alreadyExists) {
-          return `Oh! ${found.title} is already chilling in your list! 😅 Want to update its status or something?`;
+    if (/\b(restore|import|upload|load)\b/i.test(lowerMessage)) {
+      return 'To restore your list, open **⚙️ Settings** and choose **Import Backup**. I can walk you through it if needed.';
+    }
+
+    if (/\b(help|what can you|how do|how to|commands)\b/i.test(lowerMessage)) {
+      return `I can be way more dynamic now ${randomReaction()} Try things like:
+
+• **"recommend me action anime"**
+• **"add frieren to my plan"**
+• **"mark vinland saga completed"**
+• **"episode 8 of one piece"**
+• **"show my watching list"**
+• **"show stats"**
+
+Just type naturally, I’ll figure out your intent.`;
+    }
+
+    if (/\b(trending|new this season|latest)\b/i.test(lowerMessage)) {
+      const trending = [...sampleAnimes]
+        .sort((a, b) => (b.year || 0) - (a.year || 0) || (b.rating || 0) - (a.rating || 0))
+        .slice(0, 5);
+
+      return `Fresh picks from newer seasons ${randomReaction()}:
+
+${trending
+        .map((anime) => `• **${anime.title}** (${anime.year || 'Unknown'}) - ⭐ ${anime.rating?.toFixed(1) || 'N/A'}`)
+        .join('\n')}
+
+Want me to add one to your list?`;
+    }
+
+    if ((/\b(episode|ep)\b/i.test(lowerMessage) || /\bi\s*(am|'m)\s*on\b/i.test(lowerMessage)) && animes.length > 0) {
+      const episodeNumber = extractEpisodeNumber(userMessage);
+
+      if (!trackedAnime) {
+        if (episodeNumber !== null) {
+          return `I caught episode **${episodeNumber}**, but I need the anime name too. Example: **"episode ${episodeNumber} of Naruto"**.`;
         }
-        
-        addAnime({
-          title: found.title,
-          titleJapanese: found.titleJapanese,
-          imageUrl: found.imageUrl,
-          episodes: found.episodes,
-          description: found.description,
-          genres: found.genres,
-          status: 'plan-to-watch',
-          year: found.year,
-        });
-        
-        const reactions = [
-          `Done! Added **${found.title}** to your Plan to Watch! ${randomReaction()} You're gonna love it, trust me~`,
-          `Gotcha! **${found.title}** is now on your list! ${randomEnthusiastic()}`,
-          `*adds with enthusiasm* **${found.title}** added! ${randomReaction()} Great choice honestly!`,
-        ];
-        return reactions[Math.floor(Math.random() * reactions.length)];
+        return 'Tell me the anime + episode number and I can update progress. Example: **"ep 12 of Jujutsu Kaisen"**.';
       }
-      
-      return "Which anime should I add? Just tell me the name and I'll hook you up! 📝";
+
+      if (episodeNumber === null) {
+        return `I found **${trackedAnime.title}** in your list. Tell me which episode number and I’ll update it.`;
+      }
+
+      const clampedEpisode = trackedAnime.episodes
+        ? Math.min(Math.max(episodeNumber, 0), trackedAnime.episodes)
+        : Math.max(episodeNumber, 0);
+
+      updateProgress(trackedAnime.id, clampedEpisode);
+      if (trackedAnime.status !== 'watching') {
+        updateStatus(trackedAnime.id, 'watching');
+      }
+
+      const completionLine =
+        trackedAnime.episodes && clampedEpisode >= trackedAnime.episodes
+          ? `You reached the end of **${trackedAnime.title}** 🎉 Want me to mark it as completed too?`
+          : `Progress saved: **${trackedAnime.title}** is now at episode **${clampedEpisode}${trackedAnime.episodes ? `/${trackedAnime.episodes}` : ''}**.`;
+
+      return `${randomEnthusiastic()} ${completionLine}`;
     }
 
-    // Show lists with personality
-    if (lowerMessage.includes('show') || lowerMessage.includes('list') || lowerMessage.includes('what') || lowerMessage.includes('my anime')) {
-      if (lowerMessage.includes('watching') || lowerMessage.includes('current')) {
+    const explicitStatusIntent = /\b(mark|set|move|change|update)\b/i.test(lowerMessage);
+    if ((explicitStatusIntent || requestedStatus) && requestedStatus && trackedAnime) {
+      updateStatus(trackedAnime.id, requestedStatus);
+
+      return `Done ${randomReaction()} **${trackedAnime.title}** is now **${STATUS_LABELS[requestedStatus]}**.`;
+    }
+
+    if ((explicitStatusIntent || requestedStatus) && requestedStatus && !trackedAnime && animes.length > 0) {
+      return `I can update that. Tell me the anime title too, like **"mark Naruto completed"**.`;
+    }
+
+    const addIntent = /\b(add|track|queue|put)\b/i.test(lowerMessage);
+    if (addIntent) {
+      const animeToAdd = catalogAnime;
+      const targetStatus = requestedStatus || 'plan-to-watch';
+
+      if (!animeToAdd) {
+        return `I couldn't match that title in my built-in catalog yet. Try another title or use the **Add Anime** search for full AniList results.`;
+      }
+
+      const alreadyTracked = animes.find(
+        (anime) => normalizeTitle(anime.title) === normalizeTitle(animeToAdd.title),
+      );
+
+      if (alreadyTracked) {
+        if (requestedStatus && alreadyTracked.status !== requestedStatus) {
+          updateStatus(alreadyTracked.id, requestedStatus);
+          return `Already in your list, so I updated **${animeToAdd.title}** to **${STATUS_LABELS[requestedStatus]}** instead ${randomReaction()}`;
+        }
+
+        return `**${animeToAdd.title}** is already on your list. Want me to move it to another status?`;
+      }
+
+      addAnime({
+        title: animeToAdd.title,
+        titleJapanese: animeToAdd.titleJapanese,
+        imageUrl: animeToAdd.imageUrl,
+        episodes: animeToAdd.episodes,
+        description: animeToAdd.description,
+        genres: animeToAdd.genres,
+        status: targetStatus,
+        year: animeToAdd.year,
+        rating: animeToAdd.rating,
+      });
+
+      return `${randomEnthusiastic()} Added **${animeToAdd.title}** to **${STATUS_LABELS[targetStatus]}**.`;
+    }
+
+    const recommendationIntent =
+      /\b(recommend|suggest|similar|what should i watch|anything like|need.*watch)\b/i.test(lowerMessage) ||
+      /\b(bored|boring)\b/i.test(lowerMessage);
+
+    if (recommendationIntent) {
+      const excludedTitles = new Set(animes.map((anime) => normalizeTitle(anime.title)));
+      const requestedGenre = detectGenre(lowerMessage);
+
+      let pool = sampleAnimes.filter((anime) => !excludedTitles.has(normalizeTitle(anime.title)));
+
+      if (requestedGenre) {
+        pool = pool.filter((anime) => anime.genres.some((genre) => genre.toLowerCase().includes(requestedGenre)));
+      }
+
+      if (!requestedGenre && catalogAnime) {
+        const relatedGenres = catalogAnime.genres.map((genre) => genre.toLowerCase());
+        const relatedPool = pool.filter((anime) =>
+          anime.genres.some((genre) => relatedGenres.includes(genre.toLowerCase())),
+        );
+        if (relatedPool.length >= 3) {
+          pool = relatedPool;
+        }
+      }
+
+      if (!requestedGenre && !catalogAnime && animes.length > 0) {
+        const preferred = topGenres(animes.filter((anime) => anime.status === 'watching' || anime.status === 'completed'));
+        if (preferred.length > 0) {
+          const preferredPool = pool.filter((anime) =>
+            anime.genres.some((genre) => preferred.includes(genre.toLowerCase())),
+          );
+          if (preferredPool.length >= 3) {
+            pool = preferredPool;
+          }
+        }
+      }
+
+      if (pool.length === 0) {
+        pool = sampleAnimes;
+      }
+
+      const picks = pickMany(pool, 3);
+
+      const intro = requestedGenre
+        ? `Ooh ${requestedGenre} picks? ${randomEnthusiastic()} Here are 3 good ones:`
+        : catalogAnime
+          ? `If you like **${catalogAnime.title}**, you'll probably vibe with these:`
+          : `${randomThinking()} Based on your vibe, try these next:`;
+
+      return `${intro}
+
+${picks
+        .map(
+          (anime) =>
+            `• **${anime.title}** (${anime.genres.slice(0, 2).join(', ')}) - ${shortDescription(anime.description)}`,
+        )
+        .join('\n\n')}
+
+Want me to add one directly to your list?`;
+    }
+
+    const asksForStats = /\b(stats|statistics|summary|overview|progress)\b/i.test(lowerMessage);
+    const asksForList = /\b(show|list|my anime|what am i|what's in my)\b/i.test(lowerMessage);
+
+    if (asksForStats || asksForList) {
+      if (/\b(watching|current)\b/i.test(lowerMessage)) {
         const watching = getByStatus('watching');
         if (watching.length === 0) {
-          return "You're not watching anything right now! 😱 That's a crime honestly... Want some recommendations to fix that?";
+          return `You're not watching anything right now 😱 Want me to recommend something quick to start?`;
         }
-        const intro = watching.length > 3 
-          ? `Wow, you've got quite the lineup! ${randomReaction()} Here's what you're watching:`
-          : "Here's your current watch list:";
-        return `📺 **Currently Watching (${watching.length}):**\n\n${watching.map(a => `• ${a.title} ${a.currentEpisode ? `(Ep ${a.currentEpisode}/${a.episodes || '?'})` : ''}`).join('\n')}\n\n${intro.includes('Wow') ? "Living the dream~" : "Keep it up! 💪"}`;
+
+        return `📺 **Currently Watching (${watching.length})**\n\n${watching
+          .map((anime) => `• ${anime.title}${anime.currentEpisode ? ` (ep ${anime.currentEpisode}/${anime.episodes || '?'})` : ''}`)
+          .join('\n')}`;
       }
-      
-      if (lowerMessage.includes('completed') || lowerMessage.includes('finished') || lowerMessage.includes('done')) {
+
+      if (/\b(completed|finished|done)\b/i.test(lowerMessage)) {
         const completed = getByStatus('completed');
         if (completed.length === 0) {
-          return "No completed anime yet... but hey, everyone starts somewhere! 💪 The journey of a thousand anime begins with a single episode~";
+          return 'No completed anime yet, but we can fix that soon 💪';
         }
-        const praise = completed.length > 10 
-          ? "A true veteran! 🏆" 
-          : completed.length > 5 
-            ? "Nice progress! 🌟" 
-            : "Great start! ✨";
-        return `✅ **Completed (${completed.length}):** ${praise}\n\n${completed.map(a => `• ${a.title}`).join('\n')}\n\nWhich one was your favorite?`;
+
+        return `✅ **Completed (${completed.length})**\n\n${completed.map((anime) => `• ${anime.title}`).join('\n')}`;
       }
-      
-      if (lowerMessage.includes('plan') || lowerMessage.includes('to watch') || lowerMessage.includes('queue')) {
+
+      if (/\b(plan|queue|to watch|watchlist)\b/i.test(lowerMessage)) {
         const plan = getByStatus('plan-to-watch');
         if (plan.length === 0) {
-          return "Your Plan to Watch is empty! 😮 That's rare... Want me to recommend some must-watch anime?";
+          return 'Your plan-to-watch is empty. Want 3 recs right now?';
         }
-        const comment = plan.length > 10 
-          ? "Quite the backlog! 😅 I believe in you though~" 
-          : "Good selection! 🎯";
-        return `📝 **Plan to Watch (${plan.length}):** ${comment}\n\n${plan.map(a => `• ${a.title}`).join('\n')}\n\nReady to start any of these?`;
+
+        return `📝 **Plan to Watch (${plan.length})**\n\n${plan.map((anime) => `• ${anime.title}`).join('\n')}`;
       }
-      
-      if (lowerMessage.includes('dropped')) {
+
+      if (/\b(dropped|drop)\b/i.test(lowerMessage)) {
         const dropped = getByStatus('dropped');
         if (dropped.length === 0) {
-          return "No dropped anime! Either you have great taste or endless patience... probably both! 😄";
+          return `No dropped anime. Respect ${randomReaction()}`;
         }
-        return `💔 **Dropped (${dropped.length}):**\n\n${dropped.map(a => `• ${a.title}`).join('\n')}\n\nSometimes anime just isn't for us, no shame in that!`;
+
+        return `💔 **Dropped (${dropped.length})**\n\n${dropped.map((anime) => `• ${anime.title}`).join('\n')}`;
       }
-      
-      // General stats with personality
+
+      if (/\b(on hold|hold|paused|pause)\b/i.test(lowerMessage)) {
+        const onHold = getByStatus('on-hold');
+        if (onHold.length === 0) {
+          return 'Nothing is on hold right now.';
+        }
+
+        return `⏸️ **On Hold (${onHold.length})**\n\n${onHold.map((anime) => `• ${anime.title}`).join('\n')}`;
+      }
+
       const stats = {
         watching: getByStatus('watching').length,
         completed: getByStatus('completed').length,
@@ -220,66 +454,72 @@ export function useChat({ animes, addAnime, getByStatus, exportList }: UseChatPr
         dropped: getByStatus('dropped').length,
         onHold: getByStatus('on-hold').length,
       };
-      
+
       const total = animes.length;
-      let statusComment = "";
-      if (total === 0) {
-        statusComment = "Time to start your anime journey! 🚀";
-      } else if (total < 10) {
-        statusComment = "Just getting started! The best is yet to come~ ✨";
-      } else if (total < 50) {
-        statusComment = "Nice collection! You're really getting into it! 🔥";
-      } else {
-        statusComment = "Wow, a true anime connoisseur! 👑";
+      const completionRate = total > 0 ? Math.round((stats.completed / total) * 100) : 0;
+
+      return `📊 **Your Anime Stats**
+
+• 📺 Watching: ${stats.watching}
+• ✅ Completed: ${stats.completed}
+• 📝 Plan to Watch: ${stats.plan}
+• ⏸️ On Hold: ${stats.onHold}
+• 💔 Dropped: ${stats.dropped}
+
+**Total tracked:** ${total}
+**Completion rate:** ${completionRate}%
+
+${
+        total === 0
+          ? 'Time to start your anime journey 🚀'
+          : total < 10
+            ? 'Nice start. Your list is building fast ✨'
+            : total < 50
+              ? `Looking strong ${randomReaction()} You're deep in the anime zone.`
+              : 'Elite catalog status unlocked 👑'
+      }`;
+    }
+
+    if (/\b(favorite|best anime|goat)\b/i.test(lowerMessage)) {
+      if (animes.length > 0) {
+        const completed = getByStatus('completed');
+        if (completed.length > 0) {
+          const topRated = [...completed]
+            .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+            .slice(0, 3);
+
+          return `Your list says these are top-tier for you ${randomReaction()}:
+
+${topRated
+            .map((anime) => `• **${anime.title}**${anime.rating ? ` (⭐ ${anime.rating.toFixed(1)})` : ''}`)
+            .join('\n')}
+
+Wanna find similar shows?`;
+        }
       }
-      
-      return `📊 **Your Anime Stats:**\n\n• 📺 Watching: ${stats.watching}\n• ✅ Completed: ${stats.completed}\n• 📝 Plan to Watch: ${stats.plan}\n• ⏸️ On Hold: ${stats.onHold}\n• 💔 Dropped: ${stats.dropped}\n\n**Total: ${total} anime tracked!**\n\n${statusComment}`;
+
+      return `${randomThinking()} All-time classics for me: **Attack on Titan**, **FMAB**, **Steins;Gate**. What's your #1?`;
     }
 
-    // Backup/Export with enthusiasm
-    if (lowerMessage.includes('backup') || lowerMessage.includes('export') || lowerMessage.includes('save') || lowerMessage.includes('download')) {
-      exportList();
-      return `Gotcha! Downloading your backup now! 📁✨ Keep it somewhere safe - your precious anime list must be protected at all costs! You can restore it anytime from Settings.`;
-    }
-
-    // Restore/Import
-    if (lowerMessage.includes('restore') || lowerMessage.includes('import') || lowerMessage.includes('upload') || lowerMessage.includes('load')) {
-      return "To restore your list, hit the **⚙️ Settings** button up top and use **Import** to upload your backup file! Your list will be back in no time~ 📂✨";
-    }
-
-    // Help with personality
-    if (lowerMessage.includes('help') || lowerMessage.includes('what can you') || lowerMessage.includes('how do') || lowerMessage.includes('how to')) {
-      return `Hey! I'm AniBuddy, your personal anime assistant! ${randomReaction()} Here's what we can do together:\n\n• 🎯 **Get Recommendations** - "recommend action anime" or "suggest something like Naruto"\n• ➕ **Manage Your List** - "add Demon Slayer to my list"\n• 📊 **Check Your Stats** - "show my watching list" or "what are my stats"\n• 💾 **Backup & Restore** - "backup my list" or "how to restore"\n\nJust chat naturally! I'm here to help~ 🌸`;
-    }
-
-    // Anime-specific small talk
-    if (lowerMessage.includes('favorite') || lowerMessage.includes('best anime') || lowerMessage.includes('goat')) {
-      return `${randomThinking()} That's tough! There are so many amazing ones... But classics like **Attack on Titan**, **Fullmetal Alchemist: Brotherhood**, and **Steins;Gate** are up there for sure! ${randomReaction()} What about you? What's YOUR top pick?`;
-    }
-
-    if (lowerMessage.includes('boring') || lowerMessage.includes('bored')) {
-      const suggestions = sampleAnimes.sort(() => Math.random() - 0.5).slice(0, 2);
-      return `Bored?! We can fix that! 😤 How about trying **${suggestions[0].title}** or **${suggestions[1].title}**? Both are absolute bangers! Want me to add them to your list?`;
-    }
-
-    // Easter eggs
-    if (lowerMessage.includes('waifu') || lowerMessage.includes('husbando')) {
-      return `Ah, a person of culture! 😏 I don't judge~ Everyone has their favorites! Though I'm just here to help with your anime list, haha!`;
+    if (/\b(waifu|husbando)\b/i.test(lowerMessage)) {
+      return "Ah, a person of culture 😏 I don't judge. I'm just here to keep your anime list legendary.";
     }
 
     if (lowerMessage.includes('manga')) {
-      return `Manga is amazing too! 📚 Though I'm mainly an anime buddy... but hey, a lot of great manga get anime adaptations! Any favorites you're hoping get animated?`;
+      return 'Manga is peak too 📚 If you want, I can suggest anime adaptations based on manga vibes.';
     }
 
-    // Default responses with variety
+    const listHint = animes.length > 0 ? `You can say things like **"mark ${animes[0].title} completed"**.` : 'Try **"recommend me 3 anime"** or **"add frieren to my list"**.';
+
     const defaults = [
-      `${randomThinking()} I'm not quite sure what you mean, but I'm always down to chat about anime! Want some recommendations or wanna check your list?`,
-      `Hmm, I didn't quite catch that~ 😅 But hey, we can talk about anime recs, your watchlist, or anything anime-related!`,
-      `*tilts head* Not sure I follow... but I'm here to help with your anime journey! What would you like to do? ${randomReaction()}`,
-      `${randomEmpathy()}, but I'm a bit confused haha. Try asking for recommendations or checking your anime stats!`,
+      `${randomThinking()} I didn't fully catch that, but I'm ready to help with recs, list updates, stats, or progress tracking.`,
+      `Hmm, not 100% sure what you meant ${randomEmpathy()} Want recommendations or list management?`,
+      `I can work with natural chat now. ${listHint}`,
+      `Try a direct command and I'll handle it instantly. ${listHint}`,
     ];
-    return defaults[Math.floor(Math.random() * defaults.length)];
-  }, [animes, addAnime, getByStatus, exportList]);
+
+    return getRandom(defaults);
+  }, [animes, addAnime, updateStatus, updateProgress, getByStatus, exportList]);
 
   const sendMessage = useCallback((content: string) => {
     const userMessage: ChatMessage = {
@@ -289,14 +529,13 @@ export function useChat({ animes, addAnime, getByStatus, exportList }: UseChatPr
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
-    // Variable typing delay for more natural feel
-    const baseDelay = 600;
-    const variableDelay = Math.random() * 800;
-    const contentLengthDelay = Math.min(content.length * 10, 500);
-    
+    const baseDelay = 450;
+    const variableDelay = Math.random() * 700;
+    const contentLengthDelay = Math.min(content.length * 8, 450);
+
     setTimeout(() => {
       const response = generateResponse(content);
       const assistantMessage: ChatMessage = {
@@ -305,7 +544,7 @@ export function useChat({ animes, addAnime, getByStatus, exportList }: UseChatPr
         content: response,
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
       setIsTyping(false);
     }, baseDelay + variableDelay + contentLengthDelay);
   }, [generateResponse]);
